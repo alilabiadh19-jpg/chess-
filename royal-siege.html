@@ -1,0 +1,1994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Royal Siege — Medieval Chess</title>
+
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Chess.js (game rules) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+
+<!-- Google Fonts: MedievalSharp + IM Fell English -->
+<link href="https://fonts.googleapis.com/css2?family=MedievalSharp&family=IM+Fell+English:ital@0;1&family=Cinzel+Decorative:wght@400;700;900&family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet" />
+
+<style>
+  /* ─────────────────────────────────────────────
+     ROOT DESIGN TOKENS — Royal Archive Palette
+  ───────────────────────────────────────────── */
+  :root {
+    --parchment:       #f4e4c1;
+    --parchment-dark:  #e0c99a;
+    --parchment-deep:  #c8a96e;
+    --ink:             #2a1a0e;
+    --ink-light:       #4a2e1a;
+    --gold:            #c9972a;
+    --gold-light:      #f0c040;
+    --gold-shine:      #ffe080;
+    --crimson:         #8b1a1a;
+    --crimson-light:   #c0392b;
+    --crimson-glow:    #ff6b6b;
+    --shadow-dark:     #1a0e05;
+    --shadow-mid:      #2d1a08;
+    --board-light:     #e8d5a3;
+    --board-dark:      #7a4f2d;
+    --board-border:    #5c3317;
+    --highlight:       rgba(255, 215, 0, 0.55);
+    --move-dot:        rgba(255, 200, 50, 0.75);
+    --danger:          rgba(180, 0, 0, 0.55);
+    --selected-glow:   0 0 18px 4px rgba(240, 190, 40, 0.85);
+  }
+
+  /* ─────────────────────────────────────────────
+     BASE RESET & GLOBAL
+  ───────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    overflow-x: hidden;
+    background-color: var(--shadow-dark);
+    color: var(--parchment);
+    font-family: 'IM Fell English', serif;
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='M10 0 L12 7 L19 7 L13 11 L15 18 L10 14 L5 18 L7 11 L1 7 L8 7Z' fill='%23c9972a' stroke='%23fff' stroke-width='1'/%3E%3C/svg%3E") 10 10, auto;
+  }
+
+  /* ─────────────────────────────────────────────
+     PARCHMENT TEXTURE OVERLAY (pseudo-element noise)
+  ───────────────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    opacity: 0.4;
+  }
+
+  /* ─────────────────────────────────────────────
+     SCROLLWORK BORDER DECORATION
+  ───────────────────────────────────────────── */
+  .scroll-border {
+    border: 2px solid var(--gold);
+    border-image: none;
+    box-shadow:
+      inset 0 0 20px rgba(201,151,42,0.15),
+      0 0 12px rgba(201,151,42,0.2),
+      0 4px 24px rgba(0,0,0,0.6);
+    position: relative;
+  }
+  .scroll-border::before, .scroll-border::after {
+    content: '❧';
+    font-size: 1.1rem;
+    color: var(--gold);
+    position: absolute;
+    opacity: 0.7;
+  }
+  .scroll-border::before { top: 6px; left: 10px; }
+  .scroll-border::after  { bottom: 6px; right: 10px; }
+
+  /* ─────────────────────────────────────────────
+     TYPOGRAPHY HELPERS
+  ───────────────────────────────────────────── */
+  .font-royal   { font-family: 'Cinzel Decorative', serif; }
+  .font-cinzel  { font-family: 'Cinzel', serif; }
+  .font-fell    { font-family: 'IM Fell English', serif; }
+
+  .text-gold     { color: var(--gold-light); }
+  .text-crimson  { color: var(--crimson-light); }
+  .text-parchment{ color: var(--parchment); }
+  .text-ink      { color: var(--ink); }
+
+  /* ─────────────────────────────────────────────
+     HEADER
+  ───────────────────────────────────────────── */
+  #header {
+    background: linear-gradient(180deg, var(--shadow-dark) 0%, var(--shadow-mid) 100%);
+    border-bottom: 2px solid var(--gold);
+    padding: 14px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: relative; z-index: 10;
+  }
+  #header-title {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: clamp(1.2rem, 4vw, 2rem);
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    color: var(--gold-light);
+    text-shadow: 0 0 20px rgba(240,190,40,0.5), 0 2px 4px #000;
+  }
+  #header-subtitle {
+    font-family: 'IM Fell English', serif;
+    font-style: italic;
+    font-size: 0.75rem;
+    color: var(--parchment-deep);
+    letter-spacing: 0.15em;
+    text-align: center;
+  }
+  .crown-icon { font-size: 1.8rem; filter: drop-shadow(0 0 6px var(--gold)); }
+
+  /* ─────────────────────────────────────────────
+     LAYOUT WRAPPER
+  ───────────────────────────────────────────── */
+  #app {
+    position: relative; z-index: 1;
+    display: flex; flex-direction: column; min-height: calc(100vh - 65px);
+    padding: 16px;
+    gap: 16px;
+  }
+  @media (min-width: 900px) {
+    #app { flex-direction: row; align-items: flex-start; justify-content: center; }
+  }
+
+  /* ─────────────────────────────────────────────
+     SIDE PANEL (left: lobby + captured + log)
+  ───────────────────────────────────────────── */
+  #side-panel {
+    display: flex; flex-direction: column; gap: 14px;
+    width: 100%;
+  }
+  @media (min-width: 900px) {
+    #side-panel { width: 260px; min-width: 220px; flex-shrink: 0; }
+  }
+
+  .panel-card {
+    background: linear-gradient(160deg, #2d1a08ee 0%, #1a0e05ee 100%);
+    border: 1px solid var(--gold);
+    border-radius: 4px;
+    padding: 14px 16px;
+    box-shadow: inset 0 0 30px rgba(0,0,0,0.4), 0 4px 20px rgba(0,0,0,0.5);
+    position: relative;
+    overflow: hidden;
+  }
+  .panel-card::after {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 0%, rgba(201,151,42,0.07) 0%, transparent 70%);
+  }
+
+  .panel-title {
+    font-family: 'Cinzel', serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--gold);
+    border-bottom: 1px solid rgba(201,151,42,0.3);
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  /* ─────────────────────────────────────────────
+     BUTTONS
+  ───────────────────────────────────────────── */
+  .btn-royal {
+    font-family: 'Cinzel', serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    border: 1px solid var(--gold);
+    background: linear-gradient(135deg, #3d2010 0%, #1a0e05 100%);
+    color: var(--gold-light);
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.18s ease;
+    position: relative; overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,215,0,0.1);
+    white-space: nowrap;
+  }
+  .btn-royal::before {
+    content: '';
+    position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,215,0,0.12), transparent);
+    transition: left 0.4s ease;
+  }
+  .btn-royal:hover::before { left: 100%; }
+  .btn-royal:hover {
+    background: linear-gradient(135deg, #5a3018 0%, #2d1a08 100%);
+    box-shadow: 0 0 14px rgba(201,151,42,0.4), 0 2px 8px rgba(0,0,0,0.5);
+    color: var(--gold-shine);
+  }
+  .btn-royal:active { transform: translateY(1px); }
+
+  .btn-crimson {
+    border-color: var(--crimson);
+    color: #ff9999;
+  }
+  .btn-crimson:hover {
+    background: linear-gradient(135deg, #4a1010 0%, #1a0505 100%);
+    box-shadow: 0 0 14px rgba(139,26,26,0.5);
+    color: var(--crimson-glow);
+    border-color: var(--crimson-light);
+  }
+
+  /* ─────────────────────────────────────────────
+     INPUT FIELD
+  ───────────────────────────────────────────── */
+  .royal-input {
+    font-family: 'Cinzel', serif;
+    font-size: 0.78rem;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(201,151,42,0.4);
+    color: var(--parchment);
+    padding: 7px 10px;
+    border-radius: 3px;
+    outline: none;
+    width: 100%;
+    letter-spacing: 0.15em;
+    transition: border-color 0.2s;
+  }
+  .royal-input::placeholder { color: rgba(200,160,80,0.4); letter-spacing: 0.1em; }
+  .royal-input:focus { border-color: var(--gold); box-shadow: 0 0 8px rgba(201,151,42,0.3); }
+
+  /* ─────────────────────────────────────────────
+     STATUS BADGE
+  ───────────────────────────────────────────── */
+  #room-status {
+    font-family: 'IM Fell English', serif;
+    font-style: italic;
+    font-size: 0.78rem;
+    color: var(--parchment-deep);
+    margin-top: 6px;
+    min-height: 18px;
+    transition: color 0.3s;
+  }
+  #room-status.active { color: var(--gold-light); }
+  #room-status.error  { color: var(--crimson-glow); }
+
+  /* ─────────────────────────────────────────────
+     CAPTURED PIECES DISPLAY
+  ───────────────────────────────────────────── */
+  .captured-row {
+    display: flex; flex-wrap: wrap; gap: 3px; min-height: 28px;
+    align-items: center;
+  }
+  .captured-piece {
+    width: 24px; height: 24px;
+    opacity: 0.75;
+    filter: sepia(30%);
+    transition: transform 0.2s;
+  }
+  .captured-piece:hover { transform: scale(1.3); opacity: 1; }
+  .captured-label {
+    font-family: 'IM Fell English', serif;
+    font-style: italic;
+    font-size: 0.7rem;
+    color: var(--parchment-deep);
+    margin-bottom: 4px;
+  }
+
+  /* ─────────────────────────────────────────────
+     MOVE LOG
+  ───────────────────────────────────────────── */
+  #move-log {
+    max-height: 160px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 2px;
+    scrollbar-width: thin; scrollbar-color: var(--gold) transparent;
+  }
+  #move-log::-webkit-scrollbar { width: 4px; }
+  #move-log::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 2px; }
+
+  .move-entry {
+    font-family: 'Cinzel', serif;
+    font-size: 0.68rem;
+    color: var(--parchment-deep);
+    padding: 2px 4px;
+    border-radius: 2px;
+    display: flex; gap: 6px;
+    transition: background 0.15s;
+  }
+  .move-entry:hover { background: rgba(201,151,42,0.08); }
+  .move-entry .move-num { color: var(--gold); min-width: 22px; }
+  .move-entry .move-white { color: var(--parchment); min-width: 50px; }
+  .move-entry .move-black { color: #bbb; }
+
+  /* ─────────────────────────────────────────────
+     BOARD SECTION (CENTER)
+  ───────────────────────────────────────────── */
+  #board-section {
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+    flex: 1;
+  }
+
+  /* Turn Indicator */
+  #turn-banner {
+    font-family: 'Cinzel', serif;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 7px 24px;
+    border: 1px solid var(--gold);
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, rgba(201,151,42,0.12), transparent);
+    color: var(--gold-light);
+    text-shadow: 0 0 10px rgba(240,190,40,0.4);
+    transition: all 0.3s ease;
+    text-align: center;
+    width: 100%;
+    max-width: 520px;
+  }
+  #turn-banner.black-turn {
+    color: #bbb;
+    border-color: #888;
+    background: linear-gradient(90deg, transparent, rgba(100,100,100,0.1), transparent);
+    text-shadow: none;
+  }
+  #turn-banner.check { color: var(--crimson-glow); border-color: var(--crimson); animation: pulse-red 0.8s ease infinite alternate; }
+  @keyframes pulse-red { from { box-shadow: none; } to { box-shadow: 0 0 20px rgba(200,60,60,0.5); } }
+
+  /* ─────────────────────────────────────────────
+     CHESS BOARD
+  ───────────────────────────────────────────── */
+  #board-wrapper {
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  #board-container {
+    display: grid; grid-template-columns: 24px 1fr; grid-template-rows: 1fr 24px;
+    gap: 0;
+  }
+
+  #board-labels-left {
+    display: flex; flex-direction: column;
+    justify-content: space-around;
+    padding-bottom: 24px;
+  }
+  #board-labels-bottom {
+    display: flex; flex-direction: row;
+    justify-content: space-around;
+    padding-left: 0;
+  }
+  .board-label {
+    font-family: 'Cinzel', serif;
+    font-size: 0.6rem;
+    color: var(--parchment-deep);
+    text-align: center;
+    line-height: 1;
+    opacity: 0.7;
+  }
+
+  #chess-board {
+    --sq: clamp(42px, 10vw, 66px);
+    display: grid;
+    grid-template-columns: repeat(8, var(--sq));
+    grid-template-rows: repeat(8, var(--sq));
+    border: 3px solid var(--board-border);
+    box-shadow:
+      0 0 0 1px #1a0e05,
+      0 0 0 4px var(--board-dark),
+      0 0 0 6px var(--board-border),
+      0 8px 40px rgba(0,0,0,0.7),
+      inset 0 0 40px rgba(0,0,0,0.2);
+    position: relative;
+    touch-action: none;
+  }
+
+  .square {
+    width: var(--sq); height: var(--sq);
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.15s;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+  .square.light { background: var(--board-light); }
+  .square.dark  { background: var(--board-dark);  }
+
+  .square.selected {
+    background: #c9972a !important;
+    box-shadow: var(--selected-glow);
+    z-index: 2;
+  }
+  .square.last-move-from { background: rgba(200,155,42,0.45) !important; }
+  .square.last-move-to   { background: rgba(200,155,42,0.65) !important; }
+  .square.in-check       { background: rgba(180,30,30,0.75) !important; }
+
+  /* Move dots */
+  .move-dot-el {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none; z-index: 3;
+  }
+  .move-dot-el::before {
+    content: '';
+    width: 30%; height: 30%;
+    border-radius: 50%;
+    background: var(--move-dot);
+    box-shadow: 0 0 8px rgba(255,200,50,0.6);
+  }
+  .square.capture-hint .move-dot-el::before {
+    width: 88%; height: 88%;
+    border-radius: 50%;
+    background: transparent;
+    border: 4px solid rgba(255,80,80,0.6);
+    box-shadow: 0 0 8px rgba(255,80,80,0.4);
+  }
+
+  /* ─────────────────────────────────────────────
+     PIECE SVGs
+  ───────────────────────────────────────────── */
+  .piece {
+    width: 88%; height: 88%;
+    pointer-events: none;
+    position: relative; z-index: 4;
+    transition: transform 0.1s ease;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.7));
+  }
+  .square:hover .piece { transform: scale(1.07); }
+  .square.selected .piece { transform: scale(1.12); filter: drop-shadow(0 0 8px rgba(255,215,0,0.7)) drop-shadow(0 2px 4px rgba(0,0,0,0.8)); }
+
+  /* Piece capture animation */
+  @keyframes piece-capture {
+    0%   { transform: scale(1) rotate(0deg); opacity: 1; }
+    40%  { transform: scale(1.3) rotate(15deg); opacity: 0.9; }
+    100% { transform: scale(0) rotate(45deg); opacity: 0; }
+  }
+  .piece.capturing { animation: piece-capture 0.35s ease-in forwards; }
+
+  /* ─────────────────────────────────────────────
+     RIGHT PANEL (game controls + voice)
+  ───────────────────────────────────────────── */
+  #right-panel {
+    display: flex; flex-direction: column; gap: 14px;
+    width: 100%;
+  }
+  @media (min-width: 900px) {
+    #right-panel { width: 220px; min-width: 200px; flex-shrink: 0; }
+  }
+
+  /* Score / Advantage */
+  #advantage-bar-container {
+    height: 10px;
+    background: #111;
+    border: 1px solid rgba(201,151,42,0.3);
+    border-radius: 5px;
+    overflow: hidden;
+    position: relative;
+  }
+  #advantage-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #fff 0%, #eee 100%);
+    width: 50%;
+    transition: width 0.5s ease;
+    border-radius: 5px;
+  }
+
+  /* ─────────────────────────────────────────────
+     CUTSCENE OVERLAY
+  ───────────────────────────────────────────── */
+  #cutscene-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at center, #1a0505 0%, #000000 70%);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+  #cutscene-overlay.active {
+    opacity: 1; pointer-events: all;
+  }
+
+  #cutscene-bg-fx {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 50% 50%, rgba(150,10,10,0.25) 0%, transparent 70%);
+    animation: cutscene-pulse 1.2s ease-in-out infinite alternate;
+  }
+  @keyframes cutscene-pulse {
+    from { opacity: 0.6; }
+    to   { opacity: 1.0; }
+  }
+
+  /* Dramatic slash lines */
+  #cutscene-slash {
+    position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  }
+  #cutscene-slash::before, #cutscene-slash::after {
+    content: '';
+    position: absolute;
+    top: -20%; left: -10%; width: 120%; height: 3px;
+    background: linear-gradient(90deg, transparent, rgba(200,50,50,0.8), transparent);
+    transform-origin: center;
+  }
+  #cutscene-slash::before {
+    transform: rotate(-12deg) translateY(30vh);
+    animation: slash-in 0.3s 0.1s ease-out both;
+  }
+  #cutscene-slash::after {
+    transform: rotate(8deg) translateY(60vh);
+    animation: slash-in 0.3s 0.2s ease-out both;
+  }
+  @keyframes slash-in {
+    from { opacity: 0; scaleX(0); }
+    to   { opacity: 1; }
+  }
+
+  #cutscene-content {
+    position: relative; z-index: 2;
+    text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 20px;
+    padding: 20px;
+  }
+
+  #cutscene-piece-svg {
+    width: 140px; height: 140px;
+    filter: drop-shadow(0 0 30px rgba(200,50,50,0.8));
+    animation: fallen-piece 0.5s 0.2s ease-out both;
+  }
+  @keyframes fallen-piece {
+    from { transform: translateY(-60px) rotate(-20deg); opacity: 0; }
+    to   { transform: translateY(0) rotate(0deg); opacity: 1; }
+  }
+
+  #cutscene-title {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: clamp(1.6rem, 6vw, 3rem);
+    font-weight: 900;
+    color: var(--crimson-glow);
+    text-shadow: 0 0 30px rgba(255,80,80,0.8), 0 0 60px rgba(200,0,0,0.4);
+    letter-spacing: 0.1em;
+    animation: title-slam 0.4s 0.3s cubic-bezier(0.1, 0.8, 0.3, 1.2) both;
+  }
+  @keyframes title-slam {
+    from { transform: scale(2.5); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+
+  #cutscene-subtitle {
+    font-family: 'IM Fell English', serif;
+    font-style: italic;
+    font-size: clamp(0.9rem, 2.5vw, 1.3rem);
+    color: var(--parchment-deep);
+    animation: fade-up 0.4s 0.6s ease-out both;
+    max-width: 380px;
+    line-height: 1.6;
+  }
+  @keyframes fade-up {
+    from { transform: translateY(20px); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+  }
+
+  #cutscene-dismiss {
+    animation: fade-up 0.4s 1.0s ease-out both;
+  }
+
+  /* ─────────────────────────────────────────────
+     GAME OVER BANNER
+  ───────────────────────────────────────────── */
+  #gameover-overlay {
+    position: fixed; inset: 0; z-index: 900;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.88);
+    backdrop-filter: blur(4px);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.5s ease;
+  }
+  #gameover-overlay.active { opacity: 1; pointer-events: all; }
+
+  #gameover-card {
+    background: linear-gradient(160deg, #2d1a08 0%, #1a0e05 100%);
+    border: 2px solid var(--gold);
+    border-radius: 6px;
+    padding: 40px 50px;
+    text-align: center;
+    box-shadow: 0 0 60px rgba(201,151,42,0.3), 0 20px 60px rgba(0,0,0,0.7);
+    max-width: 420px; width: 90%;
+    animation: card-reveal 0.5s 0.2s cubic-bezier(0.1, 0.8, 0.3, 1.1) both;
+  }
+  @keyframes card-reveal {
+    from { transform: scale(0.7) rotateX(15deg); opacity: 0; }
+    to   { transform: scale(1) rotateX(0deg); opacity: 1; }
+  }
+  #gameover-title {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: clamp(1.4rem, 5vw, 2.4rem);
+    font-weight: 900;
+    color: var(--gold-light);
+    text-shadow: 0 0 20px rgba(240,190,40,0.5);
+    margin-bottom: 10px;
+  }
+  #gameover-result {
+    font-family: 'IM Fell English', serif;
+    font-style: italic;
+    color: var(--parchment);
+    font-size: 1.1rem;
+    margin-bottom: 24px;
+  }
+
+  /* ─────────────────────────────────────────────
+     ROOM CODE DISPLAY
+  ───────────────────────────────────────────── */
+  #room-code-display {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: 2rem;
+    font-weight: 900;
+    color: var(--gold-shine);
+    letter-spacing: 0.3em;
+    text-shadow: 0 0 20px rgba(255,215,0,0.6);
+    text-align: center;
+    padding: 10px;
+    border: 1px dashed rgba(201,151,42,0.5);
+    border-radius: 4px;
+    background: rgba(0,0,0,0.3);
+    display: none;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  #room-code-display:hover {
+    background: rgba(201,151,42,0.1);
+    box-shadow: 0 0 10px rgba(201,151,42,0.3);
+  }
+
+  /* ─────────────────────────────────────────────
+     PROMOTION MODAL
+  ───────────────────────────────────────────── */
+  #promotion-modal {
+    position: fixed; inset: 0; z-index: 800;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(3px);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  #promotion-modal.active { opacity: 1; pointer-events: all; }
+  #promotion-card {
+    background: linear-gradient(160deg, #2d1a08 0%, #1a0e05 100%);
+    border: 2px solid var(--gold);
+    border-radius: 6px;
+    padding: 24px;
+    text-align: center;
+    box-shadow: 0 0 40px rgba(201,151,42,0.3);
+  }
+  #promotion-card h3 {
+    font-family: 'Cinzel', serif;
+    font-size: 0.9rem;
+    letter-spacing: 0.2em;
+    color: var(--gold);
+    margin-bottom: 16px;
+  }
+  .promo-choices {
+    display: flex; gap: 12px; justify-content: center;
+  }
+  .promo-choice {
+    width: 64px; height: 64px;
+    cursor: pointer;
+    border: 2px solid rgba(201,151,42,0.4);
+    border-radius: 4px;
+    background: rgba(0,0,0,0.3);
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .promo-choice:hover {
+    border-color: var(--gold);
+    background: rgba(201,151,42,0.15);
+    box-shadow: 0 0 12px rgba(201,151,42,0.4);
+    transform: translateY(-3px);
+  }
+  .promo-choice svg { width: 80%; height: 80%; }
+
+  /* ─────────────────────────────────────────────
+     SPARKLE / PARTICLE EFFECTS
+  ───────────────────────────────────────────── */
+  @keyframes sparkle {
+    0%   { transform: translate(0,0) scale(1); opacity: 1; }
+    100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+  }
+  .sparkle {
+    position: fixed;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--gold-shine);
+    pointer-events: none;
+    z-index: 9999;
+    animation: sparkle 0.7s ease-out forwards;
+    box-shadow: 0 0 4px var(--gold);
+  }
+
+  /* ─────────────────────────────────────────────
+     TOAST
+  ───────────────────────────────────────────── */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: linear-gradient(135deg, #2d1a08, #1a0e05);
+    border: 1px solid var(--gold);
+    color: var(--parchment);
+    font-family: 'IM Fell English', serif;
+    font-style: italic;
+    font-size: 0.9rem;
+    padding: 10px 22px;
+    border-radius: 3px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    z-index: 2000;
+    transition: transform 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+    pointer-events: none;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* ─────────────────────────────────────────────
+     MOBILE TOUCH FEEDBACK
+  ───────────────────────────────────────────── */
+  @media (max-width: 899px) {
+    #chess-board { --sq: clamp(38px, 11.5vw, 56px); }
+    .panel-card { padding: 10px 12px; }
+  }
+
+  /* Divider ornament */
+  .ornament-divider {
+    text-align: center;
+    color: var(--gold);
+    opacity: 0.5;
+    font-size: 0.85rem;
+    letter-spacing: 0.3em;
+    padding: 4px 0;
+  }
+
+  /* ─────────────────────────────────────────────
+     SCROLL ANIMATIONS
+  ───────────────────────────────────────────── */
+  @keyframes board-reveal {
+    from { opacity: 0; transform: rotateX(8deg) scale(0.96); }
+    to   { opacity: 1; transform: rotateX(0) scale(1); }
+  }
+  #board-wrapper { animation: board-reveal 0.7s 0.2s ease-out both; }
+
+  @keyframes panel-slide-left {
+    from { opacity: 0; transform: translateX(-24px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  #side-panel { animation: panel-slide-left 0.6s 0.1s ease-out both; }
+
+  @keyframes panel-slide-right {
+    from { opacity: 0; transform: translateX(24px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  #right-panel { animation: panel-slide-right 0.6s 0.3s ease-out both; }
+
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     HEADER
+═══════════════════════════════════════════ -->
+<header id="header">
+  <div class="crown-icon" aria-hidden="true">♔</div>
+  <div style="text-align:center">
+    <div id="header-title">Royal Siege</div>
+    <div id="header-subtitle">⚔ &nbsp; The Eternal Board &nbsp; ⚔</div>
+  </div>
+  <div class="crown-icon" style="transform:scaleX(-1)" aria-hidden="true">♔</div>
+</header>
+
+<!-- ═══════════════════════════════════════════
+     MAIN APP
+═══════════════════════════════════════════ -->
+<main id="app">
+
+  <!-- ── LEFT PANEL ── -->
+  <aside id="side-panel">
+
+    <!-- Lobby / Multiplayer -->
+    <div class="panel-card scroll-border" id="lobby-card">
+      <div class="panel-title">⚑ &nbsp; Siege Lobby</div>
+
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button class="btn-royal" id="btn-create-room" onclick="createRoom()">⊕ &nbsp; Create Room</button>
+        <div id="room-code-display" title="Click to copy code" onclick="copyRoomCode()"></div>
+
+        <div class="ornament-divider">— or —</div>
+
+        <input class="royal-input" id="join-code-input" type="text" maxlength="6"
+          placeholder="Enter 6-digit code" style="text-align:center; letter-spacing:0.4em;" />
+        <button class="btn-royal" onclick="joinRoom()">⚔ &nbsp; Join Room</button>
+
+        <div id="room-status">Awaiting orders, Commander…</div>
+      </div>
+    </div>
+
+    <!-- Current Game Info -->
+    <div class="panel-card">
+      <div class="panel-title">⚔ &nbsp; Battlefield</div>
+      <div id="turn-banner" style="font-size:0.75rem; padding:6px 10px; max-width:none;">
+        White's Turn to Strike
+      </div>
+      <div style="margin-top:10px;">
+        <div class="captured-label">Advantage</div>
+        <div id="advantage-bar-container">
+          <div id="advantage-bar"></div>
+        </div>
+        <div id="advantage-label" style="font-size:0.65rem; color:var(--parchment-deep); margin-top:3px; text-align:center; font-family:'Cinzel',serif; letter-spacing:0.1em;">
+          Equal
+        </div>
+      </div>
+    </div>
+
+    <!-- Captured Pieces -->
+    <div class="panel-card">
+      <div class="panel-title">💀 &nbsp; Fallen Warriors</div>
+      <div class="captured-label">White's Fallen</div>
+      <div class="captured-row" id="captured-white"></div>
+      <div class="captured-label" style="margin-top:8px;">Black's Fallen</div>
+      <div class="captured-row" id="captured-black"></div>
+    </div>
+
+    <!-- Move Log -->
+    <div class="panel-card">
+      <div class="panel-title">📜 &nbsp; Chronicle of Battle</div>
+      <div id="move-log"></div>
+    </div>
+
+  </aside>
+
+  <!-- ── BOARD SECTION ── -->
+  <section id="board-section">
+
+    <div id="board-wrapper">
+      <div id="board-container">
+        <!-- Rank labels (8–1) -->
+        <div id="board-labels-left">
+          <div class="board-label">8</div>
+          <div class="board-label">7</div>
+          <div class="board-label">6</div>
+          <div class="board-label">5</div>
+          <div class="board-label">4</div>
+          <div class="board-label">3</div>
+          <div class="board-label">2</div>
+          <div class="board-label">1</div>
+        </div>
+        <!-- Board grid -->
+        <div id="chess-board" role="grid" aria-label="Chess Board"></div>
+        <!-- Empty corner spacer -->
+        <div></div>
+        <!-- File labels (a–h) -->
+        <div id="board-labels-bottom">
+          <div class="board-label">a</div>
+          <div class="board-label">b</div>
+          <div class="board-label">c</div>
+          <div class="board-label">d</div>
+          <div class="board-label">e</div>
+          <div class="board-label">f</div>
+          <div class="board-label">g</div>
+          <div class="board-label">h</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game controls -->
+    <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:4px;">
+      <button class="btn-royal" onclick="newGame()">⚔ &nbsp; New Game</button>
+      <button class="btn-royal" onclick="undoMove()">↩ &nbsp; Undo</button>
+      <button class="btn-royal" onclick="flipBoard()">⟳ &nbsp; Flip Board</button>
+      <button class="btn-royal btn-crimson" onclick="resignGame()">⚑ &nbsp; Resign</button>
+    </div>
+
+  </section>
+
+  <!-- ── RIGHT PANEL ── -->
+  <aside id="right-panel">
+
+    <!-- Voice Lines -->
+    <div class="panel-card scroll-border">
+      <div class="panel-title">🔊 &nbsp; Battle Heralds</div>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <button class="btn-royal" onclick="speakLine('announce')" style="font-size:0.65rem;">
+          📣 &nbsp; Announce Check
+        </button>
+        <button class="btn-royal" onclick="speakLine('capture')" style="font-size:0.65rem;">
+          ⚔ &nbsp; Battle Cry
+        </button>
+        <button class="btn-royal" onclick="speakLine('checkmate')" style="font-size:0.65rem;">
+          👑 &nbsp; Declare Victory
+        </button>
+        <button class="btn-royal" onclick="speakLine('taunt')" style="font-size:0.65rem;">
+          😈 &nbsp; Taunt the Foe
+        </button>
+      </div>
+
+      <div class="ornament-divider" style="margin:10px 0;">— Voice Settings —</div>
+
+      <div style="display:flex; align-items:center; gap:8px;">
+        <label style="font-family:'Cinzel',serif; font-size:0.65rem; color:var(--gold); letter-spacing:0.1em; flex-shrink:0;">Volume</label>
+        <input type="range" id="vol-slider" min="0" max="1" step="0.1" value="0.9"
+          style="flex:1; accent-color:var(--gold); cursor:pointer;" />
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+        <label style="font-family:'Cinzel',serif; font-size:0.65rem; color:var(--gold); letter-spacing:0.1em; flex-shrink:0;">Pitch</label>
+        <input type="range" id="pitch-slider" min="0.6" max="1.6" step="0.1" value="0.8"
+          style="flex:1; accent-color:var(--gold); cursor:pointer;" />
+      </div>
+      <div style="margin-top:8px; display:flex; align-items:center; gap:6px;">
+        <input type="checkbox" id="auto-voice" checked style="accent-color:var(--gold);" />
+        <label for="auto-voice" style="font-family:'Cinzel',serif; font-size:0.65rem; color:var(--parchment-deep); letter-spacing:0.08em; cursor:pointer;">
+          Auto-announce events
+        </label>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="panel-card">
+      <div class="panel-title">⚙ &nbsp; Edicts</div>
+      <div style="display:flex; flex-direction:column; gap:7px;">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="show-hints" checked style="accent-color:var(--gold);" />
+          <label for="show-hints" style="font-family:'Cinzel',serif; font-size:0.65rem; color:var(--parchment-deep); letter-spacing:0.08em; cursor:pointer;">
+            Show legal moves
+          </label>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="show-cutscene" checked style="accent-color:var(--gold);" />
+          <label for="show-cutscene" style="font-family:'Cinzel',serif; font-size:0.65rem; color:var(--parchment-deep); letter-spacing:0.08em; cursor:pointer;">
+            Capture cutscenes
+          </label>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="show-last-move" checked style="accent-color:var(--gold);" />
+          <label for="show-last-move" style="font-family:'Cinzel',serif; font-size:0.65rem; color:var(--parchment-deep); letter-spacing:0.08em; cursor:pointer;">
+            Highlight last move
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Piece Legend -->
+    <div class="panel-card">
+      <div class="panel-title">📖 &nbsp; Heraldry</div>
+      <div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center;">
+        <div style="text-align:center;">
+          <svg width="32" height="32" viewBox="0 0 40 40">${getPieceSVGRaw('K','w')}</svg>
+          <div style="font-size:0.55rem; color:var(--parchment-deep); font-family:'Cinzel',serif;">King</div>
+        </div>
+        <div style="text-align:center;">
+          <svg width="32" height="32" viewBox="0 0 40 40">${getPieceSVGRaw('Q','w')}</svg>
+          <div style="font-size:0.55rem; color:var(--parchment-deep); font-family:'Cinzel',serif;">Queen</div>
+        </div>
+        <div style="text-align:center;">
+          <svg width="32" height="32" viewBox="0 0 40 40">${getPieceSVGRaw('R','w')}</svg>
+          <div style="font-size:0.55rem; color:var(--parchment-deep); font-family:'Cinzel',serif;">Rook</div>
+        </div>
+        <div style="text-align:center;">
+          <svg width="32" height="32" viewBox="0 0 40 40">${getPieceSVGRaw('B','w')}</svg>
+          <div style="font-size:0.55rem; color:var(--parchment-deep); font-family:'Cinzel',serif;">Bishop</div>
+        </div>
+        <div style="text-align:center;">
+          <svg width="32" height="32" viewBox="0 0 40 40">${getPieceSVGRaw('N','w')}</svg>
+          <div style="font-size:0.55rem; color:var(--parchment-deep); font-family:'Cinzel',serif;">Knight</div>
+        </div>
+        <div style="text-align:center;">
+          <svg width="32" height="32" viewBox="0 0 40 40">${getPieceSVGRaw('P','w')}</svg>
+          <div style="font-size:0.55rem; color:var(--parchment-deep); font-family:'Cinzel',serif;">Pawn</div>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+</main>
+
+<!-- ═══════════════════════════════════════════
+     CUTSCENE OVERLAY (Capture)
+═══════════════════════════════════════════ -->
+<div id="cutscene-overlay" role="dialog" aria-modal="true" aria-label="Battle Cutscene">
+  <div id="cutscene-bg-fx"></div>
+  <div id="cutscene-slash"></div>
+  <div id="cutscene-content">
+    <svg id="cutscene-piece-svg" viewBox="0 0 40 40"></svg>
+    <div id="cutscene-title">Piece Fallen!</div>
+    <div id="cutscene-subtitle">The warrior has been vanquished from the field of battle.</div>
+    <button class="btn-royal btn-crimson" id="cutscene-dismiss" onclick="dismissCutscene()">
+      ⚔ &nbsp; Continue the Siege
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     GAME OVER OVERLAY
+═══════════════════════════════════════════ -->
+<div id="gameover-overlay" role="dialog" aria-modal="true" aria-label="Game Over">
+  <div id="gameover-card">
+    <div id="gameover-title">Victory!</div>
+    <div id="gameover-result">The game has concluded.</div>
+    <button class="btn-royal" onclick="newGame()" style="margin-right:10px;">⚔ New Game</button>
+    <button class="btn-royal" onclick="document.getElementById('gameover-overlay').classList.remove('active')">
+      📜 Review
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     PAWN PROMOTION MODAL
+═══════════════════════════════════════════ -->
+<div id="promotion-modal" role="dialog" aria-modal="true" aria-label="Pawn Promotion">
+  <div id="promotion-card">
+    <h3>⚜ Choose Your Ascendant ⚜</h3>
+    <div class="promo-choices" id="promo-choices"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     TOAST
+═══════════════════════════════════════════ -->
+<div id="toast"></div>
+
+<!-- ═══════════════════════════════════════════
+     FIREBASE PLACEHOLDER
+     ─────────────────────────────────────────
+     HOW TO ADD YOUR FIREBASE CREDENTIALS:
+     1. Go to https://console.firebase.google.com/
+     2. Create a project → Add a web app
+     3. Copy your firebaseConfig object
+     4. Paste it below, replacing the placeholder values
+     5. Uncomment the Firebase imports and initializeApp()
+     6. Implement the room logic in createRoom() and joinRoom()
+═══════════════════════════════════════════ -->
+<!--
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.x.x/firebase-app.js';
+  import { getDatabase, ref, set, get, onValue } from 'https://www.gstatic.com/firebasejs/10.x.x/firebase-database.js';
+
+  // ── PASTE YOUR FIREBASE CONFIG HERE ──────────────────────────
+  const firebaseConfig = {
+    apiKey:            "YOUR_API_KEY",
+    authDomain:        "YOUR_PROJECT.firebaseapp.com",
+    databaseURL:       "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+    projectId:         "YOUR_PROJECT",
+    storageBucket:     "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId:             "YOUR_APP_ID"
+  };
+  // ─────────────────────────────────────────────────────────────
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
+
+  // Called by createRoom() — writes initial game state under /rooms/{code}
+  window.firebaseCreateRoom = async (code) => {
+    await set(ref(db, `rooms/${code}`), {
+      fen: 'start',
+      turn: 'w',
+      moves: [],
+      white: 'host',
+      black: null,
+      createdAt: Date.now()
+    });
+  };
+
+  // Called by joinRoom() — reads room and subscribes to updates
+  window.firebaseJoinRoom = async (code) => {
+    const snap = await get(ref(db, `rooms/${code}`));
+    if (!snap.exists()) return false;
+    onValue(ref(db, `rooms/${code}`), (s) => {
+      const data = s.val();
+      if (data.fen && data.fen !== 'start') {
+        chess.load(data.fen);
+        renderBoard();
+        updateUI();
+      }
+    });
+    return true;
+  };
+
+  // Called after each move — writes updated FEN to Firebase
+  window.firebaseSyncMove = async (code, fen, moveHistory) => {
+    await set(ref(db, `rooms/${code}`), {
+      fen,
+      moves: moveHistory,
+      updatedAt: Date.now()
+    });
+  };
+</script>
+-->
+
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   ROYAL SIEGE — Game Engine
+   ════════════════════════════════════════════════════════════════ */
+
+// ── Piece value map (for advantage calculation)
+const PIECE_VALUES = { p:1, n:3, b:3, r:5, q:9, k:0 };
+
+// ── Anime-Medieval SVG piece definitions (stylized hand-drawn look)
+// Each returns inner SVG elements for a 40×40 viewBox
+function getPieceSVGRaw(type, color) {
+  const isW = color === 'w';
+  const fill    = isW ? '#f5e6c8' : '#1a0a00';
+  const stroke  = isW ? '#7a4f2d' : '#c9972a';
+  const accent  = isW ? '#c9972a' : '#f0c040';
+  const eye     = isW ? '#2a1a0e' : '#f0c040';
+
+  switch(type.toUpperCase()) {
+    // ── KING ── Crown with cross finial
+    case 'K': return `
+      <g>
+        <!-- Base/pedestal -->
+        <rect x="9" y="33" width="22" height="5" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1.3"/>
+        <rect x="11" y="30" width="18" height="4" rx="1.5" fill="${fill}" stroke="${stroke}" stroke-width="1.1"/>
+        <!-- Body -->
+        <rect x="13" y="22" width="14" height="9" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
+        <!-- Crown base -->
+        <rect x="11" y="18" width="18" height="5" rx="1" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
+        <!-- Crown points -->
+        <polygon points="11,18 13,10 15,18" fill="${fill}" stroke="${stroke}" stroke-width="1"/>
+        <polygon points="16,18 20,7 24,18" fill="${fill}" stroke="${stroke}" stroke-width="1"/>
+        <polygon points="25,18 27,10 29,18" fill="${fill}" stroke="${stroke}" stroke-width="1"/>
+        <!-- Cross finial -->
+        <rect x="19" y="4" width="2" height="7" rx="1" fill="${accent}"/>
+        <rect x="16.5" y="6" width="7" height="2" rx="1" fill="${accent}"/>
+        <!-- Gems on crown -->
+        <circle cx="14" cy="13" r="1.2" fill="${accent}"/>
+        <circle cx="20" cy="10" r="1.5" fill="${accent}"/>
+        <circle cx="26" cy="13" r="1.2" fill="${accent}"/>
+        <!-- Belt line -->
+        <line x1="13" y1="26" x2="27" y2="26" stroke="${accent}" stroke-width="0.8" opacity="0.7"/>
+      </g>`;
+
+    // ── QUEEN ── Elaborate crown + flowing form
+    case 'Q': return `
+      <g>
+        <rect x="9" y="33" width="22" height="5" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1.3"/>
+        <rect x="11" y="30" width="18" height="4" rx="1.5" fill="${fill}" stroke="${stroke}" stroke-width="1.1"/>
+        <!-- Dress/body trapezoidal -->
+        <path d="M13 22 Q12 30 11 30 L29 30 Q28 30 27 22 Z" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
+        <!-- Torso -->
+        <rect x="14" y="17" width="12" height="6" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
+        <!-- Crown base with 5 spikes -->
+        <rect x="11" y="13" width="18" height="4" rx="1" fill="${fill}" stroke="${stroke}" stroke-width="1"/>
+        <polygon points="11,13 12.5,7 14,13" fill="${fill}" stroke="${stroke}" stroke-width="0.9"/>
+        <polygon points="15,13 16.5,6 18,13" fill="${fill}" stroke="${stroke}" stroke-width="0.9"/>
+        <polygon points="19,13 20,5 21,13" fill="${fill}" stroke="${stroke}" stroke-width="0.9"/>
+        <polygon points="22,13 23.5,6 25,13" fill="${fill}" stroke="${stroke}" stroke-width="0.9"/>
+        <polygon points="26,13 27.5,7 29,13" fill="${fill}" stroke="${stroke}" stroke-width="0.9"/>
+        <!-- Orb tips -->
+        <circle cx="12.5" cy="7" r="1.3" fill="${accent}"/>
+        <circle cx="16.5" cy="6" r="1.3" fill="${accent}"/>
+        <circle cx="20"   cy="4.5" r="1.5" fill="${accent}"/>
+        <circle cx="23.5" cy="6" r="1.3" fill="${accent}"/>
+        <circle cx="27.5" cy="7" r="1.3" fill="${accent}"/>
+        <!-- Dress decoration -->
+        <line x1="14" y1="25" x2="26" y2="25" stroke="${accent}" stroke-width="0.7" opacity="0.6"/>
+        <line x1="12.5" y1="28" x2="27.5" y2="28" stroke="${accent}" stroke-width="0.7" opacity="0.5"/>
+      </g>`;
+
+    // ── ROOK ── Fortress tower with battlements
+    case 'R': return `
+      <g>
+        <rect x="9" y="33" width="22" height="5" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1.3"/>
+        <!-- Tower body -->
+        <rect x="11" y="18" width="18" height="16" rx="1" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
+        <!-- Arrow slit window -->
+        <rect x="18.5" y="22" width="3" height="6" rx="1" fill="${eye}" opacity="0.8"/>
+        <!-- Battlement top -->
+        <rect x="11" y="13" width="18" height="6" rx="1" fill="${fill}" stroke="${stroke}" stroke-width="1.1"/>
+        <!-- Merlons (raised crenels) -->
+        <rect x="11" y="9" width="4.5" height="5" rx="1" fill="${fill}" stroke="${stroke}" stroke-width="1"/>
+        <rect x="17.75" y="9" width="4.5" height="5" rx="1" fill="${fill}" stroke="${stroke}" stroke-width="1"/>
+        <rect x="24.5" y="9" width="4.5" height="5" rx="1" fill="${fill}" stroke="${stroke}" stroke-width="1"/>
+        <!-- Belt lines (masonry) -->
+        <line x1="11" y1="24" x2="29" y2="24" stroke="${stroke}" stroke-width="0.7" opacity="0.5"/>
+        <line x1="11" y1="29" x2="29" y2="29" stroke="${stroke}" stroke-width="0.7" opacity="0.5"/>
+        <!-- Corner quoins accent -->
+        <rect x="11" y="18" width="2.5" height="16" fill="${accent}" opacity="0.2"/>
+        <rect x="26.5" y="18" width="2.5" height="16" fill="${accent}" opacity="0.2"/>
+      </g>`;
+
+    // ── BISHOP ── Mitre hat + staff
+    case 'B': return `
+      <g>
+        <rect x="9" y="33" width="22" height="5" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1.3"/>
+        <rect x="12" y="30" width="16" height="4" rx="1.5" fill="${fill}" stroke="${stroke}" stroke-width="1.1"/>
+        <!-- Body -->
+        <ellipse cx="20" cy="25" rx="8" ry="6" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
+        <!-- Neck -->
+        <rect x="17" y="18" width="6" height="5" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1"/>
+        <!-- Mitre hat -->
+        <path d="M14 18 Q14 8 20 4 Q26 8 26 18 Z" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
+        <!-- Mitre cleft -->
+        <line x1="20" y1="4" x2="20" y2="18" stroke="${stroke}" stroke-width="0.8"/>
+        <!-- Mitre band -->
+        <line x1="14" y1="16" x2="26" y2="16" stroke="${accent}" stroke-width="1.2"/>
+        <!-- Cross on mitre -->
+        <line x1="20" y1="9" x2="20" y2="14" stroke="${accent}" stroke-width="1.2"/>
+        <line x1="17.5" y1="11" x2="22.5" y2="11" stroke="${accent}" stroke-width="1.2"/>
+        <!-- Staff / crozier hint -->
+        <circle cx="20" cy="26" r="2" fill="${accent}" opacity="0.7"/>
+      </g>`;
+
+    // ── KNIGHT ── Stylized horse head (anime-armored)
+    case 'N': return `
+      <g>
+        <rect x="9" y="33" width="22" height="5" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1.3"/>
+        <rect x="11" y="30" width="18" height="4" rx="1.5" fill="${fill}" stroke="${stroke}" stroke-width="1.1"/>
+        <!-- Horse neck/body base -->
+        <path d="M13 30 Q11 24 12 19 Q13 15 17 14 L22 14 Q25 14 27 17 Q30 21 28 26 Q26 30 22 30 Z"
+          fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
+        <!-- Head shape -->
+        <path d="M17 14 Q16 9 18 6 Q19 4 21 4 Q24 4 25 7 Q27 10 25 14 L17 14 Z"
+          fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
+        <!-- Mane -->
+        <path d="M17 14 Q15 11 16 8 Q17 5 18 6" fill="none" stroke="${accent}" stroke-width="1.5" stroke-linecap="round"/>
+        <!-- Ear -->
+        <path d="M20 4 L22 1.5 L23.5 4" fill="${fill}" stroke="${stroke}" stroke-width="0.9"/>
+        <!-- Eye -->
+        <circle cx="23" cy="8" r="2" fill="${eye}"/>
+        <circle cx="23.5" cy="7.5" r="0.7" fill="${isW ? '#fff' : '#c9972a'}"/>
+        <!-- Nostril -->
+        <path d="M22 13 Q23.5 12 24 13" fill="none" stroke="${stroke}" stroke-width="0.8"/>
+        <!-- Armor plate / barding on neck -->
+        <path d="M14 22 Q20 20 27 23" fill="none" stroke="${accent}" stroke-width="1.1" opacity="0.7"/>
+        <path d="M14 26 Q20 24 26 27" fill="none" stroke="${accent}" stroke-width="0.8" opacity="0.5"/>
+      </g>`;
+
+    // ── PAWN ── Armored soldier with spear-tip
+    case 'P': return `
+      <g>
+        <rect x="11" y="33" width="18" height="5" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
+        <rect x="12" y="30" width="16" height="4" rx="1.5" fill="${fill}" stroke="${stroke}" stroke-width="1"/>
+        <!-- Body/torso -->
+        <path d="M14 23 Q13 30 12 30 L28 30 Q27 30 26 23 Z" fill="${fill}" stroke="${stroke}" stroke-width="1.1"/>
+        <!-- Chest plate -->
+        <rect x="15" y="19" width="10" height="5" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1"/>
+        <!-- Head/helmet -->
+        <ellipse cx="20" cy="15" rx="6" ry="5.5" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
+        <!-- Visor slit -->
+        <path d="M16 15 Q20 16.5 24 15" fill="none" stroke="${eye}" stroke-width="1.2"/>
+        <!-- Helm crest -->
+        <path d="M17 10 Q20 7 23 10" fill="${fill}" stroke="${stroke}" stroke-width="1"/>
+        <ellipse cx="20" cy="9" rx="2.5" ry="2" fill="${accent}" stroke="${stroke}" stroke-width="0.8"/>
+        <!-- Spear tip suggestion -->
+        <line x1="20" y1="7" x2="20" y2="4" stroke="${accent}" stroke-width="1.2"/>
+        <polygon points="20,2 22,5 18,5" fill="${accent}"/>
+        <!-- Shield buckle -->
+        <rect x="17" y="21" width="6" height="2.5" rx="1" fill="${accent}" opacity="0.6"/>
+      </g>`;
+    default: return '';
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Build a full <svg> element string for a piece
+───────────────────────────────────────────────────────────── */
+function buildPieceSVG(type, color) {
+  const isW = color === 'w';
+  const shadowFilter = `filter:drop-shadow(0 1px 2px rgba(0,0,0,0.8))`;
+  return `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" class="piece" style="${shadowFilter}" role="img" aria-label="${isW?'White':'Black'} ${getPieceName(type)}">${getPieceSVGRaw(type, color)}</svg>`;
+}
+
+function getPieceName(t) {
+  return {K:'King',Q:'Queen',R:'Rook',B:'Bishop',N:'Knight',P:'Pawn'}[t.toUpperCase()] || t;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   GAME STATE
+───────────────────────────────────────────────────────────── */
+let chess = new Chess();
+let selectedSquare  = null;   // currently selected square (algebraic)
+let legalMovesCache = [];     // legal moves from selectedSquare
+let boardFlipped    = false;  // true = black's perspective
+let capturedWhite   = [];     // white pieces captured (by black)
+let capturedBlack   = [];     // black pieces captured (by white)
+let moveLogPairs    = [];     // [{white, black}]
+let pendingPromotion= null;   // { from, to } while waiting for choice
+let currentRoomCode = null;   // active multiplayer room code
+let gameActive      = true;
+
+/* ─────────────────────────────────────────────────────────────
+   RENDER BOARD
+───────────────────────────────────────────────────────────── */
+function renderBoard() {
+  const board = document.getElementById('chess-board');
+  const showHints    = document.getElementById('show-hints').checked;
+  const showLastMove = document.getElementById('show-last-move').checked;
+
+  // Determine last move squares
+  const history = chess.history({ verbose: true });
+  const lastMove = history.length ? history[history.length - 1] : null;
+
+  // Get in-check king square
+  let checkSquare = null;
+  if (chess.in_check()) {
+    const turn = chess.turn(); // 'w' or 'b'
+    // Find king
+    for (let f = 0; f < 8; f++) {
+      for (let r = 0; r < 8; r++) {
+        const file = String.fromCharCode(97 + f);
+        const rank = r + 1;
+        const sq   = file + rank;
+        const piece = chess.get(sq);
+        if (piece && piece.type === 'k' && piece.color === turn) {
+          checkSquare = sq;
+        }
+      }
+    }
+  }
+
+  // Build squares
+  let html = '';
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      const visualRow = boardFlipped ? 7 - row : row;
+      const visualCol = boardFlipped ? 7 - col : col;
+      const file  = String.fromCharCode(97 + visualCol);
+      const rank  = 8 - visualRow;
+      const sq    = file + rank;
+      const piece = chess.get(sq);
+      const isLight = (visualRow + visualCol) % 2 === 0;
+
+      let classes = `square ${isLight ? 'light' : 'dark'}`;
+      let dotHTML = '';
+
+      // Selected highlight
+      if (sq === selectedSquare) classes += ' selected';
+
+      // Last move highlight
+      if (showLastMove && lastMove) {
+        if (sq === lastMove.from) classes += ' last-move-from';
+        if (sq === lastMove.to)   classes += ' last-move-to';
+      }
+
+      // In-check highlight
+      if (sq === checkSquare) classes += ' in-check';
+
+      // Legal move hints
+      if (showHints && legalMovesCache.length) {
+        const isLegal = legalMovesCache.find(m => m.to === sq);
+        if (isLegal) {
+          if (isLegal.flags.includes('c') || isLegal.flags.includes('e')) {
+            classes += ' capture-hint';
+          } else {
+            classes += ' move-hint';
+          }
+          dotHTML = '<div class="move-dot-el"></div>';
+        }
+      }
+
+      const pieceHTML = piece ? buildPieceSVG(piece.type, piece.color) : '';
+
+      html += `<div class="${classes}" data-sq="${sq}" role="gridcell"
+        aria-label="${sq}${piece ? ' '+piece.color+piece.type : ''}"
+        ontouchstart="handleTouch(event,'${sq}')"
+        onclick="handleSquareClick('${sq}')">
+        ${dotHTML}${pieceHTML}
+      </div>`;
+    }
+  }
+  board.innerHTML = html;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   HANDLE SQUARE CLICK / TOUCH
+───────────────────────────────────────────────────────────── */
+function handleSquareClick(sq) {
+  if (!gameActive) return;
+
+  const piece = chess.get(sq);
+
+  // If nothing selected yet → select if it's current player's piece
+  if (!selectedSquare) {
+    if (piece && piece.color === chess.turn()) {
+      selectedSquare  = sq;
+      legalMovesCache = chess.moves({ square: sq, verbose: true });
+      renderBoard();
+    }
+    return;
+  }
+
+  // If clicking same square → deselect
+  if (sq === selectedSquare) {
+    selectedSquare  = null;
+    legalMovesCache = [];
+    renderBoard();
+    return;
+  }
+
+  // If clicking another own piece → re-select
+  if (piece && piece.color === chess.turn()) {
+    selectedSquare  = sq;
+    legalMovesCache = chess.moves({ square: sq, verbose: true });
+    renderBoard();
+    return;
+  }
+
+  // Attempt move
+  attemptMove(selectedSquare, sq);
+}
+
+/* Touch: prevent default scroll then route to click handler */
+function handleTouch(event, sq) {
+  event.preventDefault();
+  handleSquareClick(sq);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   ATTEMPT MOVE
+───────────────────────────────────────────────────────────── */
+function attemptMove(from, to) {
+  // Check if this is a pawn promotion
+  const piece = chess.get(from);
+  const isPromotion = piece && piece.type === 'p' &&
+    ((piece.color === 'w' && to[1] === '8') ||
+     (piece.color === 'b' && to[1] === '1'));
+
+  if (isPromotion) {
+    pendingPromotion = { from, to };
+    showPromotionModal(piece.color);
+    return;
+  }
+
+  doMove(from, to, null);
+}
+
+function doMove(from, to, promotion) {
+  const moveObj = { from, to };
+  if (promotion) moveObj.promotion = promotion;
+
+  // Try the move
+  const result = chess.move(moveObj);
+
+  selectedSquare  = null;
+  legalMovesCache = [];
+
+  if (!result) {
+    // Invalid move
+    renderBoard();
+    return;
+  }
+
+  // Handle capture
+  if (result.captured) {
+    const capturedPiece = { type: result.captured, color: result.color === 'w' ? 'b' : 'w' };
+    if (result.color === 'w') {
+      capturedBlack.push(capturedPiece); // White captured Black's piece
+    } else {
+      capturedWhite.push(capturedPiece); // Black captured White's piece
+    }
+    updateCapturedDisplay();
+
+    const pieceName = getPieceName(result.captured);
+    const attacker  = result.color === 'w' ? 'White' : 'Black';
+
+    // Trigger cutscene
+    if (document.getElementById('show-cutscene').checked) {
+      triggerCaptureScene(capturedPiece, attacker, pieceName);
+    }
+
+    // Voice line
+    if (document.getElementById('auto-voice').checked) {
+      const lines = [
+        `The ${pieceName} has fallen in glorious battle!`,
+        `${attacker} claims the ${pieceName}! The field runs crimson!`,
+        `A ${pieceName} is vanquished! Rejoice, warriors!`,
+        `The ${pieceName} crumbles before the siege!`
+      ];
+      speakCustomLine(lines[Math.floor(Math.random() * lines.length)]);
+    }
+  }
+
+  // Sparkle effect on target square
+  spawnSparkles(to);
+
+  // Log the move
+  logMove(result);
+
+  // Update the UI
+  renderBoard();
+  updateUI();
+
+  // Firebase sync (if connected)
+  if (currentRoomCode && typeof window.firebaseSyncMove === 'function') {
+    window.firebaseSyncMove(currentRoomCode, chess.fen(), chess.history());
+  }
+
+  // Check game-ending conditions
+  checkGameEnd(result);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   GAME END DETECTION
+───────────────────────────────────────────────────────────── */
+function checkGameEnd(lastResult) {
+  if (chess.in_checkmate()) {
+    const winner = lastResult.color === 'w' ? 'White' : 'Black';
+    showGameOver(`${winner} Achieves Victory!`, `Checkmate has been declared. The ${winner} forces stand triumphant!`);
+    if (document.getElementById('auto-voice').checked) {
+      speakCustomLine(`Checkmate! ${winner} stands victorious! The siege is over!`);
+    }
+    gameActive = false;
+  } else if (chess.in_stalemate()) {
+    showGameOver('An Honourable Stalemate', 'Neither side may advance. The siege ends in deadlock.');
+    gameActive = false;
+  } else if (chess.in_draw()) {
+    showGameOver('The Board Falls Silent', 'A draw has been reached. Honours are equal.');
+    gameActive = false;
+  } else if (chess.in_check()) {
+    if (document.getElementById('auto-voice').checked) {
+      const checked = chess.turn() === 'w' ? 'White' : 'Black';
+      speakCustomLine(`${checked} King is in check! The crown is threatened!`);
+    }
+    showToast('⚔ CHECK! The King is threatened!');
+    updateTurnBanner(true);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   TURN BANNER
+───────────────────────────────────────────────────────────── */
+function updateTurnBanner(inCheck = false) {
+  const banner = document.getElementById('turn-banner');
+  const turn   = chess.turn();
+  const side   = turn === 'w' ? 'White' : 'Black';
+  const glyphs = { w: '♔', b: '♚' };
+
+  banner.textContent = inCheck
+    ? `${glyphs[turn]} ${side} is in CHECK!`
+    : `${glyphs[turn]} ${side}'s Turn to Strike`;
+
+  banner.className = '';
+  if (turn === 'b') banner.classList.add('black-turn');
+  if (inCheck)      banner.classList.add('check');
+}
+
+/* ─────────────────────────────────────────────────────────────
+   ADVANTAGE BAR
+───────────────────────────────────────────────────────────── */
+function updateAdvantageBar() {
+  let score = 0;
+  const board = chess.board();
+  for (const row of board) {
+    for (const sq of row) {
+      if (sq) {
+        const val = PIECE_VALUES[sq.type] || 0;
+        score += sq.color === 'w' ? val : -val;
+      }
+    }
+  }
+  // Map score (-39 to +39) → 0 to 100%
+  const pct = Math.min(100, Math.max(0, 50 + (score / 39) * 50));
+  document.getElementById('advantage-bar').style.width = pct + '%';
+
+  const lbl = document.getElementById('advantage-label');
+  if (Math.abs(score) < 1) lbl.textContent = 'Equal';
+  else if (score > 0) lbl.textContent = `+${score} White`;
+  else lbl.textContent = `${score} Black`;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   MOVE LOG
+───────────────────────────────────────────────────────────── */
+function logMove(result) {
+  const history = chess.history();
+  const moveNum = Math.ceil(history.length / 2);
+  const isWhite = result.color === 'w';
+
+  if (isWhite) {
+    moveLogPairs.push({ num: moveNum, white: history[history.length - 1], black: '' });
+  } else {
+    if (moveLogPairs.length) {
+      moveLogPairs[moveLogPairs.length - 1].black = history[history.length - 1];
+    }
+  }
+
+  renderMoveLog();
+}
+
+function renderMoveLog() {
+  const log = document.getElementById('move-log');
+  log.innerHTML = moveLogPairs.map(p => `
+    <div class="move-entry">
+      <span class="move-num">${p.num}.</span>
+      <span class="move-white">${p.white}</span>
+      <span class="move-black">${p.black}</span>
+    </div>
+  `).join('');
+  log.scrollTop = log.scrollHeight;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   CAPTURED PIECES DISPLAY
+───────────────────────────────────────────────────────────── */
+function updateCapturedDisplay() {
+  const wEl = document.getElementById('captured-white');
+  const bEl = document.getElementById('captured-black');
+
+  wEl.innerHTML = capturedWhite.map(p =>
+    `<div class="captured-piece">${buildSmallPieceSVG(p.type, p.color)}</div>`
+  ).join('');
+  bEl.innerHTML = capturedBlack.map(p =>
+    `<div class="captured-piece">${buildSmallPieceSVG(p.type, p.color)}</div>`
+  ).join('');
+}
+
+function buildSmallPieceSVG(type, color) {
+  return `<svg viewBox="0 0 40 40" style="width:24px;height:24px;">${getPieceSVGRaw(type, color)}</svg>`;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   UPDATE ALL UI ELEMENTS
+───────────────────────────────────────────────────────────── */
+function updateUI() {
+  updateTurnBanner(chess.in_check());
+  updateAdvantageBar();
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PAWN PROMOTION MODAL
+───────────────────────────────────────────────────────────── */
+function showPromotionModal(color) {
+  const modal   = document.getElementById('promotion-modal');
+  const choices = document.getElementById('promo-choices');
+  modal.classList.add('active');
+
+  choices.innerHTML = ['q','r','b','n'].map(type => `
+    <div class="promo-choice" onclick="choosePromotion('${type}')">
+      <svg viewBox="0 0 40 40">${getPieceSVGRaw(type, color)}</svg>
+    </div>
+  `).join('');
+}
+
+function choosePromotion(type) {
+  document.getElementById('promotion-modal').classList.remove('active');
+  if (pendingPromotion) {
+    doMove(pendingPromotion.from, pendingPromotion.to, type);
+    pendingPromotion = null;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   CUTSCENE OVERLAY
+───────────────────────────────────────────────────────────── */
+const CUTSCENE_FLAVOR = {
+  K: ['The King has been struck! All is lost!', 'The crown topples! Darkness falls upon the realm!'],
+  Q: ['The Queen is slain! Her power extinguished!', 'The greatest warrior has fallen! Mourn, soldiers!'],
+  R: ['A mighty Tower crumbles to dust!', 'The fortress wall has been breached!'],
+  B: ['The Bishop of the realm has been vanquished!', 'A holy warrior falls in the name of the siege!'],
+  N: ['A gallant Knight meets their end today!', 'The Noble Knight has fallen in valiant combat!'],
+  P: ['A brave Soldier dies in service to the crown!', 'A loyal Pawn sacrifices all for the realm!']
+};
+
+function triggerCaptureScene(capturedPiece, attacker, pieceName) {
+  const overlay = document.getElementById('cutscene-overlay');
+  const svg     = document.getElementById('cutscene-piece-svg');
+  const title   = document.getElementById('cutscene-title');
+  const subtitle= document.getElementById('cutscene-subtitle');
+
+  // Build piece SVG at large size
+  svg.innerHTML = getPieceSVGRaw(capturedPiece.type, capturedPiece.color);
+
+  const flavorArr = CUTSCENE_FLAVOR[capturedPiece.type.toUpperCase()] || [pieceName + ' has fallen!'];
+  const flavor    = flavorArr[Math.floor(Math.random() * flavorArr.length)];
+
+  title.textContent = `${pieceName} Slain!`;
+  subtitle.textContent = flavor;
+
+  overlay.classList.add('active');
+}
+
+function dismissCutscene() {
+  document.getElementById('cutscene-overlay').classList.remove('active');
+}
+
+/* ─────────────────────────────────────────────────────────────
+   GAME OVER OVERLAY
+───────────────────────────────────────────────────────────── */
+function showGameOver(titleText, resultText) {
+  document.getElementById('gameover-title').textContent  = titleText;
+  document.getElementById('gameover-result').textContent = resultText;
+  document.getElementById('gameover-overlay').classList.add('active');
+}
+
+/* ─────────────────────────────────────────────────────────────
+   WEB SPEECH SYNTHESIS — Battle Voice Lines
+───────────────────────────────────────────────────────────── */
+const VOICE_LINES = {
+  announce: [
+    'Heed this warning! The King is in check!',
+    'The crown is under siege! Defend your liege!',
+    'Checkmate draws near! Protect the realm!',
+    'The enemy advances! All swords to the King!'
+  ],
+  capture: [
+    'A warrior falls, consumed by the flames of battle!',
+    'Blood is shed upon the hallowed squares!',
+    'The siege claims another soul for glory!',
+    'Steel meets steel! A piece is taken!'
+  ],
+  checkmate: [
+    'Checkmate is upon you! The realm falls this day!',
+    'The siege is won! Long live the conquering force!',
+    'Victory! The enemy king cannot escape his fate!',
+    'Glorious triumph! The crown is yours!'
+  ],
+  taunt: [
+    'Your strategy is as feeble as a squire\'s, fiend!',
+    'Your pieces tremble before my mighty siege!',
+    'Surrender now and spare your remaining soldiers!',
+    'Even a blind court jester could outplay thee!',
+    'Is that your best move? My queen weeps with laughter!'
+  ]
+};
+
+function speakLine(category) {
+  const lines = VOICE_LINES[category];
+  const line  = lines[Math.floor(Math.random() * lines.length)];
+  speakCustomLine(line);
+}
+
+function speakCustomLine(text) {
+  if (!('speechSynthesis' in window)) return;
+  const synth    = window.speechSynthesis;
+  const volume   = parseFloat(document.getElementById('vol-slider').value);
+  const pitch    = parseFloat(document.getElementById('pitch-slider').value);
+
+  synth.cancel(); // Cancel any ongoing speech
+
+  const utter   = new SpeechSynthesisUtterance(text);
+  utter.volume  = volume;
+  utter.pitch   = pitch;
+  utter.rate    = 0.88;
+
+  // Try to pick a dramatic male voice if available
+  const voices = synth.getVoices();
+  const preferred = voices.find(v =>
+    v.name.toLowerCase().includes('male') ||
+    v.name.toLowerCase().includes('daniel') ||
+    v.name.toLowerCase().includes('google uk english male')
+  );
+  if (preferred) utter.voice = preferred;
+
+  synth.speak(utter);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   SPARKLE PARTICLE EFFECT
+───────────────────────────────────────────────────────────── */
+function spawnSparkles(sq) {
+  const el = document.querySelector(`[data-sq="${sq}"]`);
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  const cx = rect.left + rect.width  / 2;
+  const cy = rect.top  + rect.height / 2;
+
+  for (let i = 0; i < 8; i++) {
+    const spark = document.createElement('div');
+    spark.className = 'sparkle';
+    const angle = (Math.PI * 2 / 8) * i;
+    const dist  = 30 + Math.random() * 25;
+    spark.style.cssText = `
+      left: ${cx}px; top: ${cy}px;
+      --tx: ${Math.cos(angle) * dist}px;
+      --ty: ${Math.sin(angle) * dist}px;
+    `;
+    document.body.appendChild(spark);
+    setTimeout(() => spark.remove(), 750);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   TOAST NOTIFICATION
+───────────────────────────────────────────────────────────── */
+let toastTimeout;
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => toast.classList.remove('show'), 3200);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   GAME CONTROLS
+───────────────────────────────────────────────────────────── */
+function newGame() {
+  chess.reset();
+  selectedSquare  = null;
+  legalMovesCache = [];
+  capturedWhite   = [];
+  capturedBlack   = [];
+  moveLogPairs    = [];
+  pendingPromotion= null;
+  gameActive      = true;
+
+  document.getElementById('gameover-overlay').classList.remove('active');
+  document.getElementById('captured-white').innerHTML = '';
+  document.getElementById('captured-black').innerHTML = '';
+  document.getElementById('move-log').innerHTML = '';
+
+  renderBoard();
+  updateUI();
+  showToast('⚔ A new siege commences!');
+  if (document.getElementById('auto-voice').checked) {
+    speakCustomLine('A new battle begins! May the strongest commander prevail!');
+  }
+}
+
+function undoMove() {
+  if (!chess.history().length) return;
+  chess.undo();
+  selectedSquare  = null;
+  legalMovesCache = [];
+  gameActive      = true;
+
+  // Rebuild captured pieces from scratch
+  rebuildCaptured();
+  // Remove last move from log
+  const lastPair = moveLogPairs[moveLogPairs.length - 1];
+  if (lastPair) {
+    if (lastPair.black) {
+      lastPair.black = '';
+    } else {
+      moveLogPairs.pop();
+    }
+  }
+
+  renderBoard();
+  renderMoveLog();
+  updateUI();
+  showToast('↩ Move undone — the scroll is rewritten');
+}
+
+function rebuildCaptured() {
+  capturedWhite = [];
+  capturedBlack = [];
+  const history = chess.history({ verbose: true });
+  for (const move of history) {
+    if (move.captured) {
+      const c = { type: move.captured, color: move.color === 'w' ? 'b' : 'w' };
+      if (move.color === 'w') capturedBlack.push(c);
+      else capturedWhite.push(c);
+    }
+  }
+  updateCapturedDisplay();
+}
+
+function flipBoard() {
+  boardFlipped = !boardFlipped;
+  renderBoard();
+  showToast(boardFlipped ? '⟳ Viewing from Black\'s perspective' : '⟳ Viewing from White\'s perspective');
+}
+
+function resignGame() {
+  if (!gameActive) return;
+  const resigner = chess.turn() === 'w' ? 'White' : 'Black';
+  const winner   = chess.turn() === 'w' ? 'Black' : 'White';
+  gameActive = false;
+  showGameOver(`${winner} Claims Victory!`, `${resigner} has laid down their arms and surrendered the field.`);
+  if (document.getElementById('auto-voice').checked) {
+    speakCustomLine(`${resigner} resigns. ${winner} stands victorious over the battlefield!`);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   MULTIPLAYER LOBBY
+   ─────────────────────────────────────────────────────────────
+   These functions manage local room codes.
+   To make them functional, connect to Firebase in the
+   module block at the top of this file.
+───────────────────────────────────────────────────────────── */
+function generateRoomCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+function createRoom() {
+  const code = generateRoomCode();
+  currentRoomCode = code;
+
+  const display = document.getElementById('room-code-display');
+  display.style.display = 'block';
+  display.textContent   = code;
+
+  setRoomStatus(`Room "${code}" created. Share this code!`, 'active');
+  showToast(`⚑ Room ${code} — Awaiting challenger…`);
+
+  // ── Firebase hook ──
+  if (typeof window.firebaseCreateRoom === 'function') {
+    window.firebaseCreateRoom(code).then(() => {
+      setRoomStatus(`Room "${code}" is live. Awaiting challenger…`, 'active');
+    });
+  } else {
+    setRoomStatus(`[Offline] Room "${code}" ready — add Firebase to go live.`, 'active');
+  }
+}
+
+function joinRoom() {
+  const input = document.getElementById('join-code-input');
+  const code  = input.value.trim();
+
+  if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+    setRoomStatus('⚠ Enter a valid 6-digit code.', 'error');
+    return;
+  }
+
+  currentRoomCode = code;
+  setRoomStatus(`Connecting to siege room "${code}"…`, '');
+
+  // ── Firebase hook ──
+  if (typeof window.firebaseJoinRoom === 'function') {
+    window.firebaseJoinRoom(code).then(exists => {
+      if (exists) {
+        setRoomStatus(`Joined room "${code}"! You are Black.`, 'active');
+        boardFlipped = true;
+        renderBoard();
+        showToast(`⚔ Joined room ${code} as Black!`);
+      } else {
+        setRoomStatus(`⚠ Room "${code}" not found.`, 'error');
+        currentRoomCode = null;
+      }
+    });
+  } else {
+    setRoomStatus(`[Offline] Would join room "${code}". Add Firebase to enable.`, 'active');
+  }
+}
+
+function copyRoomCode() {
+  if (!currentRoomCode) return;
+  navigator.clipboard.writeText(currentRoomCode).then(() => {
+    showToast(`📋 Code "${currentRoomCode}" copied to clipboard!`);
+  });
+}
+
+function setRoomStatus(msg, cls) {
+  const el = document.getElementById('room-status');
+  el.textContent  = msg;
+  el.className    = cls;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   INIT
+───────────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  renderBoard();
+  updateUI();
+
+  // Voices sometimes load asynchronously in browsers
+  if (typeof speechSynthesis !== 'undefined') {
+    speechSynthesis.onvoiceschanged = () => {}; // pre-load voices
+  }
+
+  // Keyboard support: Escape deselects
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (document.getElementById('cutscene-overlay').classList.contains('active')) {
+        dismissCutscene();
+      } else if (document.getElementById('promotion-modal').classList.contains('active')) {
+        // Can't escape promotion — you must choose
+      } else {
+        selectedSquare  = null;
+        legalMovesCache = [];
+        renderBoard();
+      }
+    }
+  });
+});
+
+</script>
+</body>
+</html>
